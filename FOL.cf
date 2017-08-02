@@ -6,7 +6,7 @@ FPred. SForm6 ::= Ident "(" [STerm] ")" ;
 FNot.  SForm6 ::= "~" SForm6 ;
 FAnd.  SForm5 ::= SForm6 "&" SForm5;
 FOr.   SForm4 ::= SForm5 "|"  SForm4 ;
-FImpl. SForm3 ::= SForm4 "=>" SForm3 ;
+FImpl. SForm3 ::= SForm4 "->" SForm3 ;
 FEqv.  SForm2 ::= SForm2 "="  SForm3 ;
 FALL.  SForm1 ::= "ALL" Ident "." SForm;
 FEX.   SForm1 ::= "EX"  Ident "." SForm;
@@ -16,13 +16,14 @@ coercions SForm 6;
 separator SForm  "," ;
 
 -- STerms
-TVar.    STerm ::= Ident ;
+TVar.    STerm ::= "?" Ident ;
+TBVar.   STerm ::= Ident ;
 TParam.  STerm ::= SParam ;
 TFunApp. STerm ::= Ident"("[STerm]")";
 
 PIdent. SPId ::= "?" Ident ;
 
-PParam. SParam ::= SPId "<" [SPId] ">" ;
+PParam. SParam ::= Ident "<" [SPId] ">" ;
 
 separator SPId ",";
 
