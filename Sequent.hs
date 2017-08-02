@@ -179,4 +179,5 @@ apply env = rewriteBi go
 
 occurs :: Name -> Term -> Bool
 occurs n t =
-  elem n (variables t) || elem n (concat [ vs | Param _ vs <- parameters t ])
+  elem n (variables t) ||
+  elem n (concat [ vs | Param _ vs <- parameters t ])
