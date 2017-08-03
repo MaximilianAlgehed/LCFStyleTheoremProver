@@ -63,11 +63,45 @@ splitQuantifier q (f:fs) =
                    fmap (\(f', s, fs) -> (f', s, f:fs)) (splitQuantifier q fs)
     _ -> fmap (\(f', s, fs) -> (f', s, f:fs)) (splitQuantifier q fs)
 
+replaceAt :: [Formula] -> Int -> Term -> Term -> [Formula]
+replaceAt fs i t u =
+  take (i - 1) fs ++ [replace t u (fs !! i)] ++ drop (i + 1) fs
+
+makeFresh :: String -> ProofState -> String 
+makeFresh n ps = let sym = gensym (freeVar ps) in
+  if sym `elem` variables ps then
+    makeFresh (n ++ sym) ps
+  else
+    n ++ sym
+
+tac_eqlL :: Int -> String -> Tactic
+tac_eqlL i t ps =
+  case parseTerm t of
+    Right t -> let (lhs :|- rhs) = subGoals ps !! i in
+               [ spliceGoals ps i [ (Equality t t : lhs) :|- rhs ] ]
+    _ -> []
+
+tac_eqlLR :: Int -> Tactic
+tac_eqlLR i ps =
+  let (lhs :|- rhs) = subGoals ps !! i in
+    concat
+      [ [ spliceGoals ps i [ lhs :|- (replaceAt rhs n t u) ]
+        | n <- [0..length rhs - 1] ]
+      | Equality t u <- lhs ]
+
+tac_eqlRR :: Int -> Tactic
+tac_eqlRR i ps =
+  let (lhs :|- rhs) = subGoals ps !! i in
+    concat
+      [ [ spliceGoals ps i [ lhs :|- (replaceAt rhs n t u) ]
+        | n <- [0..length rhs - 1] ]
+      | Equality u t <- lhs ]
+
 tac_allL :: Int -> Tactic
 tac_allL i ps =
   let (lhs :|- rhs) = subGoals ps !! i
       fv = freeVar ps 
-      fresh n = "_" ++ n ++ gensym fv
+      fresh n = makeFresh n ps
   in [ (spliceGoals ps i [(substitute 0 (Variable $ fresh n) f : lhs) |- rhs])
        { freeVar = fv + 1 }
      | (f, n, _) <- splitQuantifier ALL lhs ]
@@ -77,7 +111,7 @@ tac_allR i ps =
   let (lhs :|- rhs) = subGoals ps !! i
       vars          = variables $ subGoals ps !! i
       fv            = freeVar ps
-      fresh n = "_" ++ n ++ gensym fv
+      fresh n = makeFresh n ps
   in [ (spliceGoals ps i
         [lhs |- (substitute 0 (Parameter (Param (fresh n) vars)) f : rhs')])
        { freeVar = fv + 1 }
@@ -88,7 +122,7 @@ tac_exL i ps =
   let (lhs :|- rhs) = subGoals ps !! i
       vars          = variables $ subGoals ps !! i
       fv            = freeVar ps
-      fresh n = "_" ++ n ++ gensym fv
+      fresh n = makeFresh n ps
   in [ (spliceGoals ps i
         [(substitute 0 (Parameter (Param (fresh n) vars)) f : lhs') |- rhs])
        { freeVar = fv + 1 }
@@ -98,7 +132,7 @@ tac_exR :: Int -> Tactic
 tac_exR i ps =
   let (lhs :|- rhs) = subGoals ps !! i
       fv = freeVar ps 
-      fresh n = "_" ++ n ++ gensym fv
+      fresh n = makeFresh n ps
       vars    = variables (subGoals ps !! i)
   in [ (spliceGoals ps i
         [lhs |- (substitute 0 (Parameter (Param (fresh n) vars)) f : rhs)])

@@ -40,6 +40,7 @@ instance Show Term where
     Function f ts -> f ++ "(" ++ intercalate ", " (show <$> ts) ++ ")"
 
 data Formula = Predicate      Name  [Term]
+             | Equality       Term  Term 
              | Connective     Conn  [Formula]
              | Quantification Quant Name Formula
              deriving (Ord, Eq, Data, Typeable)
@@ -59,8 +60,11 @@ instance Show Formula where
         showsPrec prec r
     Quantification q n f ->
       showParen (p > 0) $
-        showString (show q ++ " " ++ n ++ ". " ++
+        showString (show q ++ n ++ ". " ++
                     show (substitute 0 (SynVariable n) f))
+    Equality f g ->
+      showParen (p > 5) $ showString
+        (show f ++ " = " ++ show g)
 
 data Conn = And
           | Or
@@ -90,8 +94,8 @@ data Quant = EX
            deriving (Ord, Eq, Data, Typeable)
 
 instance Show Quant where
-  show EX  = "EX"
-  show ALL = "ALL"
+  show EX  = "?"
+  show ALL = "!"
 
 data Sequent = [Formula] :|- [Formula]
   deriving (Ord, Eq, Data, Typeable)
@@ -105,31 +109,39 @@ parseSequent s = case pSSequent (myLexer s) of
   Bad s            -> Left s
   Ok (Seq lhs rhs) -> Right $
     (translateForm empty <$> lhs) :|- (translateForm empty <$> rhs)
-  where
-    translateForm m f = case f of
-      FPred (Ident id) ts -> Predicate id (translateTerm m <$> ts) 
-      FNot  f   -> Connective Not  [translateForm m f] 
-      FAnd  f g -> Connective And  [translateForm m f, translateForm m g]
-      FOr   f g -> Connective Or   [translateForm m f, translateForm m g]
-      FImpl f g -> Connective Impl [translateForm m f, translateForm m g]
-      FEqv  f g -> Connective Eqv  [translateForm m f, translateForm m g]
-      FALL (Ident id) f -> Quantification ALL id (translateForm (extend id m) f)
-      FEX  (Ident id) f -> Quantification EX  id (translateForm (extend id m) f)
 
-    translateTerm m t = case t of
-      TVar (Ident id)
-        | otherwise   -> Variable id 
-      TBVar (Ident id)
-        | member id m -> let Just i = lookup id m in Bound i
-        | otherwise   -> error $ "Unbound variable " ++ show id
-      TParam p              -> Parameter (translateParam p)
-      TFunApp (Ident id) ts -> Function id (translateTerm m <$> ts)
+parseTerm :: String -> Either String Term
+parseTerm s = case pSTerm (myLexer s) of
+  Bad s -> Left s
+  Ok t  -> Right $ translateTerm empty t
 
-    translateParam (PParam (Ident id) ids) =
-      Param id [ id | PIdent (Ident id) <- ids ]
+translateForm :: Map Name Int -> SForm -> Formula
+translateForm m f =
+  let extend id m = insert id 0 ((+1) <$> m) in
+  case f of
+    FPred (Ident id) ts -> Predicate id (translateTerm m <$> ts) 
+    FEql  f g -> Equality (translateTerm m f) (translateTerm m g)
+    FNot  f   -> Connective Not  [translateForm m f] 
+    FAnd  f g -> Connective And  [translateForm m f, translateForm m g]
+    FOr   f g -> Connective Or   [translateForm m f, translateForm m g]
+    FImpl f g -> Connective Impl [translateForm m f, translateForm m g]
+    FEqv  f g -> Connective Eqv  [translateForm m f, translateForm m g]
+    FALL (Ident id) f -> Quantification ALL id (translateForm (extend id m) f)
+    FEX  (Ident id) f -> Quantification EX  id (translateForm (extend id m) f)
 
-    extend id m = insert id 0 ((+1) <$> m)
-
+translateTerm :: Map Name Int -> STerm -> Term
+translateTerm m t = case t of
+  TVar (Ident id)
+    | otherwise   -> Variable id 
+  TBVar (Ident id)
+    | member id m -> let Just i = lookup id m in Bound i
+    | otherwise   -> error $ "Unbound variable " ++ show id
+  TParam p              -> Parameter (translateParam p)
+    where
+     translateParam (PParam (Ident id) ids) =
+       Param id [ id | PIdent (Ident id) <- ids ]
+  TFunApp (Ident id) ts -> Function id (translateTerm m <$> ts)
+  
 sequent :: String -> Sequent
 sequent s = case parseSequent s of
   Left e  -> error e
@@ -138,21 +150,23 @@ sequent s = case parseSequent s of
 (|-) :: [Formula] -> [Formula] -> Sequent
 (|-) = (:|-)
 
-replace :: Term -> Term -> Term -> Term 
-replace u1 u2 = rewrite go
+replace :: Data t => Term -> Term -> t -> t 
+replace u1 u2 = rewriteBi go
   where
     go t = if t == u1 then Just u2 else Nothing
 
 abstract :: Int -> Term -> Formula -> Formula
 abstract i t f = case f of
-  Predicate n ts       -> Predicate n (map (replace t (Bound i)) ts)
-  Connective c fs      -> Connective c (map (abstract i t) fs)
+  Predicate n ts -> Predicate n (map (replace t (Bound i)) ts)
+  Equality f g -> Equality (replace t (Bound i) f) (replace t (Bound i) g)
+  Connective c fs -> Connective c (map (abstract i t) fs)
   Quantification q n f -> Quantification q n (abstract (i + 1) t f)
 
 substitute :: Int -> Term -> Formula -> Formula
 substitute i t f = case f of
-  Predicate n ts       -> Predicate n (map (replace (Bound i) t) ts)
-  Connective c fs      -> Connective c (map (substitute i t) fs)
+  Predicate n ts -> Predicate n (map (replace (Bound i) t) ts)
+  Equality f g -> Equality (replace (Bound i) t f) (replace (Bound i) t g)
+  Connective c fs -> Connective c (map (substitute i t) fs)
   Quantification q n f -> Quantification q n (substitute (i + 1) t f)
 
 variables :: Data t => t -> [Name]
@@ -183,6 +197,8 @@ atoms :: Formula -> Formula -> Either String Env
 atoms (Predicate a ts) (Predicate b us) = do
   unless (a == b) $ throwError "Cannot unify different predicates"
   foldM (uncurry . unify) empty (zip ts us)
+atoms (Equality f g) (Equality t u) =
+  foldM (uncurry . unify) empty [(f, t), (g, u)]
 atoms _ _ = throwError "Expected predicates"
 
 apply :: Data t => Env -> t -> t 
