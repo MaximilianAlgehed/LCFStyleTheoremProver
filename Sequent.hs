@@ -82,7 +82,7 @@ instance Show Conn where
     And  -> "&"
     Or   -> "|"
     Impl -> "->"
-    Eqv  -> "="
+    Eqv  -> "<->"
     Not  -> "~"
 
 data Quant = EX
@@ -121,7 +121,7 @@ parseSequent s = case pSSequent (myLexer s) of
         | otherwise   -> Variable id 
       TBVar (Ident id)
         | member id m -> let Just i = lookup id m in Bound i
-        | otherwise   -> Variable id
+        | otherwise   -> error $ "Unbound variable " ++ show id
       TParam p              -> Parameter (translateParam p)
       TFunApp (Ident id) ts -> Function id (translateTerm m <$> ts)
 

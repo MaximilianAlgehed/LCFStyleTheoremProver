@@ -7,7 +7,7 @@ FNot.  SForm6 ::= "~" SForm6 ;
 FAnd.  SForm5 ::= SForm6 "&" SForm5;
 FOr.   SForm4 ::= SForm5 "|"  SForm4 ;
 FImpl. SForm3 ::= SForm4 "->" SForm3 ;
-FEqv.  SForm2 ::= SForm2 "="  SForm3 ;
+FEqv.  SForm2 ::= SForm2 "<->"  SForm3 ;
 FALL.  SForm1 ::= "ALL" Ident "." SForm;
 FEX.   SForm1 ::= "EX"  Ident "." SForm;
 
