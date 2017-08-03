@@ -6,6 +6,7 @@ import Data.Data
 import Data.List hiding (lookup, insert)
 import Data.Generics.Uniplate.Data
 import Data.Map hiding (map)
+import qualified Data.Map as M
 
 import Control.Monad
 import Control.Monad.Except
@@ -17,6 +18,7 @@ import FOL.ErrM
 import FOL.Print
 
 type Name  = String
+
 data Param = Param Name [Name]
   deriving (Ord, Eq, Data, Typeable)
 
@@ -128,6 +130,14 @@ parseSequent s = case pSSequent (myLexer s) of
 
     extend id m = insert id 0 ((+1) <$> m)
 
+sequent :: String -> Sequent
+sequent s = case parseSequent s of
+  Left e  -> error e
+  Right s -> s
+
+(|-) :: [Formula] -> [Formula] -> Sequent
+(|-) = (:|-)
+
 replace :: Term -> Term -> Term -> Term 
 replace u1 u2 = rewrite go
   where
@@ -153,23 +163,27 @@ parameters = nub . universeBi
 
 type Env = Map Name Term
 
-unify :: Term -> Term -> Either String Env
-unify = go empty
-  where
-    go :: Env -> Term -> Term -> Either String Env
-    go env t u = case (t, u) of
-      (Variable a, _)
-        | u == t                 -> return env
-        | occurs a (apply env u) -> throwError "Occurs check failed"
-        | otherwise              -> return $ insert a u env
-      (_, Variable a)            -> go env u t
-      (Parameter (Param a _), Parameter (Param b _))
-        | a == b    -> return env
-        | otherwise -> throwError "Can not unify different parameters"
-      (Function a ts, Function b us)
-        | a == b    -> foldM (\e (x, y) -> go e x y) env (zip ts us)
-        | otherwise -> throwError "Can not unify different functions"
-      _ -> throwError "Unable to unify terms"
+unify :: Env -> Term -> Term -> Either String Env
+unify env tin uin = let (t, u) = (apply env tin, apply env uin) in
+  case (t, u) of
+    (Variable a, u)
+      | t == u                 -> return env
+      | occurs a (apply env u) -> throwError "Occurs check failed"
+      | otherwise              -> return $ insert a u env
+    (_, Variable a)            -> unify env u t
+    (Parameter (Param a _), Parameter (Param b _))
+      | a == b    -> return env
+      | otherwise -> throwError "Can not unify different parameters"
+    (Function a ts, Function b us)
+      | a == b    -> foldM (uncurry . unify) env (zip ts us)
+      | otherwise -> throwError "Can not unify different functions"
+    _ -> throwError "Unable to unify terms"
+
+atoms :: Formula -> Formula -> Either String Env
+atoms (Predicate a ts) (Predicate b us) = do
+  unless (a == b) $ throwError "Cannot unify different predicates"
+  foldM (uncurry . unify) empty (zip ts us)
+atoms _ _ = throwError "Expected predicates"
 
 apply :: Data t => Env -> t -> t 
 apply env = rewriteBi go
