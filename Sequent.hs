@@ -110,6 +110,11 @@ parseSequent s = case pSSequent (myLexer s) of
   Ok (Seq lhs rhs) -> Right $
     (translateForm empty <$> lhs) :|- (translateForm empty <$> rhs)
 
+parseFormula :: String -> Either String Formula
+parseFormula s = case pSForm (myLexer s) of
+  Bad s -> Left s
+  Ok f  -> Right (translateForm empty f)
+
 parseTerm :: String -> Either String Term
 parseTerm s = case pSTerm (myLexer s) of
   Bad s -> Left s
@@ -151,9 +156,9 @@ sequent s = case parseSequent s of
 (|-) = (:|-)
 
 replace :: Data t => Term -> Term -> t -> t 
-replace u1 u2 = rewriteBi go
+replace u1 u2 = transformBi go
   where
-    go t = if t == u1 then Just u2 else Nothing
+    go t = if t == u1 then u2 else t
 
 abstract :: Int -> Term -> Formula -> Formula
 abstract i t f = case f of

@@ -74,24 +74,33 @@ makeFresh n ps = let sym = gensym (freeVar ps) in
   else
     n ++ sym
 
+tac_cut :: Int -> String -> Tactic
+tac_cut i f ps =
+  case parseFormula f of
+    Right f -> let (lhs :|- rhs) = subGoals ps !! i in
+               [ spliceGoals ps i [ lhs |- [f], (f:lhs) |- rhs] ]
+    _ -> []
+
 tac_eqlL :: Int -> String -> Tactic
 tac_eqlL i t ps =
   case parseTerm t of
     Right t -> let (lhs :|- rhs) = subGoals ps !! i in
-               [ spliceGoals ps i [ (Equality t t : lhs) :|- rhs ] ]
+               [ spliceGoals ps i [ (Equality t t : lhs) |- rhs ] ]
     _ -> []
 
 tac_eqlLR :: Int -> Tactic
 tac_eqlLR i ps =
   let (lhs :|- rhs) = subGoals ps !! i in
+    filter (/= ps) $
     concat
-      [ [ spliceGoals ps i [ lhs :|- (replaceAt rhs n t u) ]
+      [ [ spliceGoals ps i [ lhs |- (replaceAt rhs n t u) ]
         | n <- [0..length rhs - 1] ]
       | Equality t u <- lhs ]
 
 tac_eqlRR :: Int -> Tactic
 tac_eqlRR i ps =
   let (lhs :|- rhs) = subGoals ps !! i in
+    filter (/= ps) $
     concat
       [ [ spliceGoals ps i [ lhs :|- (replaceAt rhs n t u) ]
         | n <- [0..length rhs - 1] ]
