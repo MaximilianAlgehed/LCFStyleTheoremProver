@@ -74,32 +74,6 @@ makeFresh n ps = let sym = gensym (freeVar ps) in
   else
     n ++ sym
 
-allBasicLeftTactics :: Int -> [Tactic]
-allBasicLeftTactics i =
-  ($i) <$> [ tac_basic
-           , tac_allL
-           , tac_exL
-           , tac_unify
-           , tac_conL
-           , tac_disjL
-           , tac_implL
-           , tac_eqvL
-           , tac_negL ]
-
-allBasicRightTactics :: Int -> [Tactic]
-allBasicRightTactics i =
-  ($i) <$> [ tac_eqlLR
-           , tac_eqlRR
-           , tac_allR
-           , tac_exR
-           , tac_unify
-           , tac_conR
-           , tac_basic
-           , tac_disjR
-           , tac_implR
-           , tac_eqvR
-           , tac_negR ]
-
 tac_cut :: Int -> String -> Tactic
 tac_cut i f ps =
   case parseFormula f of
