@@ -4,6 +4,7 @@ import Tactics
 import Sequent
 
 import Data.List
+import qualified Data.Set as S
 
 allBasicLeftTactics :: [Int -> Tactic]
 allBasicLeftTactics =
@@ -51,8 +52,9 @@ allSimplifyingLeftTactics i =
 
 everywhere :: (Int -> Tactic) -> Tactic
 everywhere t ps =
-  let n = length $ subGoals ps in
-  concat [ t i ps | i <- [0..(n - 1)] ]
+  let n       = length $ subGoals ps
+      tactics = [ try $ t  i | i <- [0..n-1] ]
+  in testDone $ foldr (=<<) [ps] tactics 
 
 simplify :: Int -> Tactic
 simplify i ps =
@@ -79,20 +81,33 @@ testDone ps = if any complete ps then take 1 $ filter complete ps else nub ps
 infixr #
 infixr 1 <--
 
+try :: Tactic -> Tactic
+try t ps =
+  let tps = t ps in
+  if null tps then
+    [ps]
+  else
+    tps
+
 (<--) :: Tactic -> [ProofState] -> [ProofState]
 t <-- ps = testDone $ t =<< ps
 
 auto :: Int -> Tactic
-auto fuel p = go fuel [p]
+auto fuel p = go S.empty fuel [p]
   where
     allTacsEverywhere =
       foldr1 (#)
       (map everywhere (allBasicLeftTactics ++ allBasicRightTactics))
 
-    go 0 ps = ps
-    go f ps =
-      let tps = allTacsEverywhere <-- ps in
+    go s 0 ps = ps
+    go s f ps =
+      let tps = filter (\x -> not $ S.member x s)
+              $ (everywhere (try . tac_basic)) <--
+                allTacsEverywhere <--
+                (try $ everywhere tac_negL # everywhere tac_negR) <--
+                ps
+      in
       if null tps then
-        testDone ps
+        ps
       else
-        go (f - 1) (testDone tps)
+        go (foldr S.insert s tps) (f - 1) (nub tps)
