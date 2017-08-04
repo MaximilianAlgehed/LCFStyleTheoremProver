@@ -50,12 +50,6 @@ allSimplifyingLeftTactics i =
            , tac_eqvR
            , tac_negR ]
 
-everywhere :: (Int -> Tactic) -> Tactic
-everywhere t ps =
-  let n       = length $ subGoals ps
-      tactics = [ try $ t  i | i <- [0..n-1] ]
-  in testDone $ foldr (=<<) [ps] tactics 
-
 simplify :: Int -> Tactic
 simplify i ps =
   let resultsR = nub $ concat $ ($ps) <$> allSimplifyingRightTactics i
@@ -95,16 +89,15 @@ t <-- ps = testDone $ t =<< ps
 auto :: Int -> Tactic
 auto fuel p = go S.empty fuel [p]
   where
-    allTacsEverywhere =
+    allTacs =
       foldr1 (#)
-      (map everywhere (allBasicLeftTactics ++ allBasicRightTactics))
+      (map ($0) (allBasicLeftTactics ++ allBasicRightTactics))
 
     go s 0 ps = ps
     go s f ps =
       let tps = filter (\x -> not $ S.member x s)
-              $ (everywhere (try . tac_basic)) <--
-                allTacsEverywhere <--
-                (try $ everywhere tac_negL # everywhere tac_negR) <--
+              $ (fully $ tac_basic 0) <--
+                allTacs <--
                 ps
       in
       if null tps then

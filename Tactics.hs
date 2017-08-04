@@ -82,22 +82,27 @@ makeFresh n ps = let sym = gensym (freeVar ps) in
   else
     n ++ sym
 
+guardProven :: ProofState -> [ProofState] -> [ProofState]
+guardProven ps pss
+  | complete ps = []
+  | otherwise   = pss
+
 tac_cut :: Int -> String -> Tactic
-tac_cut i f ps = normalise $
+tac_cut i f ps = guardProven ps $ normalise $
   case parseFormula f of
     Right f -> let (lhs :|- rhs) = subGoals ps !! i in
                [ spliceGoals ps i [ lhs |- [f], (f:lhs) |- rhs] ]
     _ -> []
 
 tac_eqlL :: Int -> String -> Tactic
-tac_eqlL i t ps = normalise $
+tac_eqlL i t ps = guardProven ps $ normalise$
   case parseTerm t of
     Right t -> let (lhs :|- rhs) = subGoals ps !! i in
                [ spliceGoals ps i [ (Equality t t : lhs) |- rhs ] ]
     _ -> []
 
 tac_eqlLR :: Int -> Tactic
-tac_eqlLR i ps = normalise $
+tac_eqlLR i ps = guardProven ps $ normalise$
   let (lhs :|- rhs) = subGoals ps !! i in
     filter (/= ps) $
     concat
@@ -106,7 +111,7 @@ tac_eqlLR i ps = normalise $
       | Equality t u <- lhs ]
 
 tac_eqlRR :: Int -> Tactic
-tac_eqlRR i ps = normalise $
+tac_eqlRR i ps = guardProven ps $ normalise$
   let (lhs :|- rhs) = subGoals ps !! i in
     filter (/= ps) $
     concat
@@ -115,7 +120,7 @@ tac_eqlRR i ps = normalise $
       | Equality u t <- lhs ]
 
 tac_allL :: Int -> Tactic
-tac_allL i ps = normalise $
+tac_allL i ps = guardProven ps $ normalise$
   let (lhs :|- rhs) = subGoals ps !! i
       fv = freeVar ps 
       fresh n = makeFresh n ps
@@ -124,7 +129,7 @@ tac_allL i ps = normalise $
      | (f, n, _) <- splitQuantifier ALL lhs ]
 
 tac_allR :: Int -> Tactic
-tac_allR i ps = normalise $
+tac_allR i ps = guardProven ps $ normalise$
   let (lhs :|- rhs) = subGoals ps !! i
       vars          = variables $ subGoals ps !! i
       fv            = freeVar ps
@@ -135,7 +140,7 @@ tac_allR i ps = normalise $
      | (f, n, rhs') <- splitQuantifier ALL rhs ]
 
 tac_exL :: Int -> Tactic
-tac_exL i ps = normalise $
+tac_exL i ps = guardProven ps $ normalise$
   let (lhs :|- rhs) = subGoals ps !! i
       vars          = variables $ subGoals ps !! i
       fv            = freeVar ps
@@ -146,85 +151,84 @@ tac_exL i ps = normalise $
      | (f, n, lhs') <- splitQuantifier EX lhs ]
 
 tac_exR :: Int -> Tactic
-tac_exR i ps = normalise $
+tac_exR i ps = guardProven ps $ normalise$
   let (lhs :|- rhs) = subGoals ps !! i
       fv = freeVar ps 
       fresh n = makeFresh n ps
-      vars    = variables (subGoals ps !! i)
   in [ (spliceGoals ps i
-        [lhs |- (substitute 0 (Parameter (Param (fresh n) vars)) f : rhs)])
+        [lhs |- (substitute 0 (Variable (fresh n)) f : rhs)])
        { freeVar = fv + 1 }
      | (f, n, _) <- splitQuantifier EX rhs ]
 
 tac_basic :: Int -> Tactic
-tac_basic i ps = normalise $
+tac_basic i ps = guardProven ps $ normalise$
   let (lhs :|- rhs) = subGoals ps !! i
   in if or [ or [ l == r | r <- rhs ] | l <- lhs ]
      then [spliceGoals ps i []]
      else []
 
 tac_unify :: Int -> Tactic
-tac_unify i ps = normalise $
+tac_unify i ps = guardProven ps $ normalise$
   let (lhs :|- rhs) = subGoals ps !! i
       unifiable = [ env | Right env <- concat [ atoms l <$> rhs | l <- lhs ] ]
   in [ apply env (spliceGoals ps i []) | env <- unifiable ]
 
 tac_conL :: Int -> Tactic
-tac_conL i ps = normalise $
+tac_conL i ps = guardProven ps $ normalise$
   let (lhs :|- rhs) = subGoals ps !! i
   in [ spliceGoals ps i [ (a:b:lhs') |- rhs ]
      | ([a, b], lhs') <- splitConnective And lhs ]
 
 tac_conR :: Int -> Tactic
-tac_conR i ps = normalise $
+tac_conR i ps = guardProven ps $ normalise$
   let (lhs :|- rhs) = subGoals ps !! i
   in [ spliceGoals ps i [ lhs |- (a:rhs'), lhs |- (b:rhs') ]
      | ([a, b], rhs') <- splitConnective And rhs ]
 
 tac_disjL :: Int -> Tactic
-tac_disjL i ps = normalise $
+tac_disjL i ps = guardProven ps $ normalise$
   let (lhs :|- rhs) = subGoals ps !! i
   in [ spliceGoals ps i [ (a:lhs') |- rhs, (b:lhs') |- rhs ]
      | ([a, b], lhs') <- splitConnective Or lhs ]
 
 tac_disjR :: Int -> Tactic
-tac_disjR i ps = normalise $
+tac_disjR i ps = guardProven ps $ normalise$
   let (lhs :|- rhs) = subGoals ps !! i
   in [ spliceGoals ps i [ lhs |- (a:b:rhs') ]
      | ([a, b], rhs') <- splitConnective Or rhs ]
 
 tac_implL :: Int -> Tactic
-tac_implL i ps = normalise $
+tac_implL i ps = guardProven ps $ normalise$
   let (lhs :|- rhs) = subGoals ps !! i
   in [ spliceGoals ps i [ lhs' |- (a:rhs), (b:lhs') |- rhs ]
      | ([a, b], lhs') <- splitConnective Impl lhs ]
 
 tac_implR :: Int -> Tactic
-tac_implR i ps = normalise $
+tac_implR i ps = guardProven ps $ normalise$
   let (lhs :|- rhs) = subGoals ps !! i
   in [ spliceGoals ps i [ (a:lhs) |- (b:rhs') ]
      | ([a, b], rhs') <- splitConnective Impl rhs ]
 
 tac_eqvL :: Int -> Tactic
-tac_eqvL i ps = normalise $
+tac_eqvL i ps = guardProven ps $ normalise$
   let (lhs :|- rhs) = subGoals ps !! i
   in [ spliceGoals ps i [ (a:b:lhs') |- rhs, lhs' |- (a:b:rhs) ]
      | ([a, b], lhs') <- splitConnective Eqv lhs ]
 
 tac_eqvR :: Int -> Tactic
-tac_eqvR i ps = normalise $
+tac_eqvR i ps = guardProven ps $ normalise$
   let (lhs :|- rhs) = subGoals ps !! i
   in [ spliceGoals ps i [ (a:lhs) |- (b:rhs'), (b:lhs) |- (a:rhs') ]
      | ([a, b], rhs') <- splitConnective Eqv rhs ]
 
 tac_negL :: Int -> Tactic
-tac_negL i ps = normalise $
+tac_negL i ps = guardProven ps $ normalise$
   let (lhs :|- rhs) = subGoals ps !! i
   in [ spliceGoals ps i [ lhs' |- (a:rhs)]
      | ([a], lhs') <- splitConnective Not lhs ]
 
 tac_negR :: Int -> Tactic
-tac_negR i ps = normalise $
+tac_negR i ps = guardProven ps $ normalise$
   let (lhs :|- rhs) = subGoals ps !! i
   in [ spliceGoals ps i [ (a:lhs) |- rhs']
      | ([a], rhs') <- splitConnective Not rhs ]
